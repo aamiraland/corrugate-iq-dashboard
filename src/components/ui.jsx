@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
-import { AlertTriangle, CheckCircle2, Info, OctagonAlert, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, FilterX, Inbox, Loader2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { Download, AlertTriangle, CheckCircle2, Info, OctagonAlert, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, FilterX, Inbox, Loader2 } from 'lucide-react';
 import { fmtNum, fmtShort } from '../utils/formatters';
 
 export const C = { accent: '#2563eb', navy: '#0f2742', green: '#4f8a6b', amber: '#d08a2e', red: '#b5524f', grey: '#94a3b8',
@@ -124,6 +125,31 @@ export function InsightList({ items, title = 'Operational Insights' }) {
   );
 }
 
+
+const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+// Exports exactly the rows currently shown (after search + sort), all pages
+function exportRows(kind, title, head, body) {
+  const base = `${title.replace(/\W+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
+  if (kind === 'csv') {
+    const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+    saveBlob(new Blob(['\uFEFF' + [head, ...body].map((r) => r.map(q).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), `${base}.csv`);
+  } else if (kind === 'xlsx') {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head, ...body]), 'Data');
+    XLSX.writeFile(wb, `${base}.xlsx`);
+  } else {
+    const w = window.open('', '_blank');
+    if (!w) return alert('Please allow pop-ups to export PDF.');
+    w.document.write(`<html><head><title>${esc(title)}</title><style>body{font:11px sans-serif;margin:16px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:3px 6px;text-align:left}th{background:#f1f5f9}</style></head><body><h3>${esc(title)} (${body.length} rows)</h3><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${body.map((r) => `<tr>${r.map((v) => `<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></body></html>`);
+    w.document.close(); w.focus(); w.print();
+  }
+}
+
 // columns: [{key,label,align,render(row)}]; rowClass(row) highlights records
 export function DataTable({ columns, rows, rowClass, pageSize = 10, searchable = true, title }) {
   const [q, setQ] = useState('');
@@ -147,12 +173,16 @@ export function DataTable({ columns, rows, rowClass, pageSize = 10, searchable =
   const pages = Math.max(1, Math.ceil(shown.length / pageSize));
   const p = Math.min(page, pages - 1);
   const slice = shown.slice(p * pageSize, p * pageSize + pageSize);
+  const doExport = (kind) => exportRows(kind, title || 'export', columns.map((c) => c.label), shown.map((r) => columns.map((c) => (c.text ? c.text(r) : r[c.key]) ?? '')));
   const toggle = (k) => { setSort((s) => (s?.key === k ? (s.dir === 'asc' ? { key: k, dir: 'desc' } : null) : { key: k, dir: 'asc' })); setPage(0); };
   return (
     <div className="card">
       <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-b border-slate-200">
         <h3 className="text-sm font-semibold text-slate-800">{title} <span className="font-normal text-slate-500">({fmtNum(shown.length)} rows)</span></h3>
-        {searchable && <div className="relative"><Search size={12} className="absolute left-2 top-2.5 text-slate-400" /><input className="sel pl-7 w-56" placeholder="Search…" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} /></div>}
+        <div className="flex items-center gap-2">
+          {['csv', 'xlsx', 'pdf'].map((k) => <button key={k} disabled={!shown.length} onClick={() => doExport(k)} className="sel flex items-center gap-1 uppercase text-xs disabled:opacity-40" title={`Download ${shown.length} filtered rows as ${k.toUpperCase()}`}><Download size={12} />{k}</button>)}
+        {searchable && <div className="relative"><Search size={14} className="absolute left-2 top-2.5 text-slate-400" /><input className="sel pl-7 w-56" placeholder="Search…" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} /></div>}
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">

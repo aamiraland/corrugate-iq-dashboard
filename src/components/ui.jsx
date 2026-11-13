@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend, AreaChart, Area } from 'recharts';
 import * as XLSX from 'xlsx';
-import { Download, AlertTriangle, CheckCircle2, Info, OctagonAlert, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, FilterX, Inbox, Loader2 } from 'lucide-react';
+import { Filter, Download, AlertTriangle, CheckCircle2, Info, OctagonAlert, Search, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, FilterX, Inbox, Loader2 } from 'lucide-react';
 import { fmtNum, fmtShort } from '../utils/formatters';
 
 export const C = { accent: '#2563eb', navy: '#0f2742', green: '#4f8a6b', amber: '#d08a2e', red: '#b5524f', grey: '#94a3b8',
@@ -132,7 +132,7 @@ function saveBlob(blob, name) {
   a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-// Exports exactly the rows currently shown (after search + sort), all pages
+// Exports exactly the rows currently shown (after search + filters + sort), all pages
 function exportRows(kind, title, head, body) {
   const base = `${title.replace(/\W+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
   if (kind === 'csv') {
@@ -150,13 +150,20 @@ function exportRows(kind, title, head, body) {
   }
 }
 
-// columns: [{key,label,align,render(row)}]; rowClass(row) highlights records
 export function DataTable({ columns, rows, rowClass, pageSize = 10, searchable = true, title }) {
   const [q, setQ] = useState('');
   const [sort, setSort] = useState(null);
   const [page, setPage] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [cf, setCf] = useState({}); // per-column filters {columnKey: value}
+  const cv = (c, r) => String((c.text ? c.text(r) : r[c.key]) ?? '—');
+  const filterCols = useMemo(() => columns.map((c) => {
+    const vals = [...new Set(rows.map((r) => cv(c, r)))];
+    return vals.length > 1 && vals.length <= 40 ? { c, vals: vals.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) } : null;
+  }).filter(Boolean), [rows, columns]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nActive = Object.values(cf).filter(Boolean).length;
   const shown = useMemo(() => {
-    let r = rows;
+    let r = rows.filter((x) => columns.every((c) => !cf[c.key] || cv(c, x) === cf[c.key]));
     if (q.trim()) { const s = q.toLowerCase(); r = r.filter((x) => columns.some((c) => String(c.text ? c.text(x) : x[c.key] ?? '').toLowerCase().includes(s))); }
     if (sort) {
       const c = columns.find((x) => x.key === sort.key);
@@ -169,7 +176,7 @@ export function DataTable({ columns, rows, rowClass, pageSize = 10, searchable =
       });
     }
     return r;
-  }, [rows, q, sort, columns]);
+  }, [rows, q, sort, columns, cf]); // eslint-disable-line react-hooks/exhaustive-deps
   const pages = Math.max(1, Math.ceil(shown.length / pageSize));
   const p = Math.min(page, pages - 1);
   const slice = shown.slice(p * pageSize, p * pageSize + pageSize);
@@ -179,9 +186,21 @@ export function DataTable({ columns, rows, rowClass, pageSize = 10, searchable =
     <div className="card">
       <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-b border-slate-200">
         <h3 className="text-sm font-semibold text-slate-800">{title} <span className="font-normal text-slate-500">({fmtNum(shown.length)} rows)</span></h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 relative">
           {['csv', 'xlsx', 'pdf'].map((k) => <button key={k} disabled={!shown.length} onClick={() => doExport(k)} className="sel flex items-center gap-1 uppercase text-xs disabled:opacity-40" title={`Download ${shown.length} filtered rows as ${k.toUpperCase()}`}><Download size={12} />{k}</button>)}
-        {searchable && <div className="relative"><Search size={14} className="absolute left-2 top-2.5 text-slate-400" /><input className="sel pl-7 w-56" placeholder="Search…" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} /></div>}
+          {searchable && <div className="relative"><Search size={14} className="absolute left-2 top-2.5 text-slate-400" /><input className="sel pl-7 w-56" placeholder="Search…" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} /></div>}
+          <button onClick={() => setOpen((o) => !o)} className={`sel flex items-center gap-1 text-xs ${nActive ? 'border-blue-500 text-blue-700' : ''}`}><Filter size={12} />Filter{nActive ? ` (${nActive})` : ''}</button>
+          {open && (
+            <div className="absolute right-0 top-full mt-2 z-20 w-72 max-h-96 overflow-y-auto card p-3 space-y-2 shadow-lg">
+              <div className="flex justify-between items-center"><span className="text-sm font-semibold text-slate-800">Filter columns</span>
+                <button className="text-xs text-blue-600 disabled:opacity-40" disabled={!nActive} onClick={() => { setCf({}); setPage(0); }}>Clear all</button></div>
+              {filterCols.length === 0 && <p className="text-xs text-slate-500">No columns with a limited set of values to filter. Use search instead.</p>}
+              {filterCols.map(({ c, vals }) => (
+                <label key={c.key} className="text-xs text-slate-500 flex flex-col gap-1">{c.label}
+                  <select className="sel" value={cf[c.key] || ''} onChange={(e) => { setCf((p) => ({ ...p, [c.key]: e.target.value })); setPage(0); }}>
+                    <option value="">All</option>{vals.map((v) => <option key={v} value={v}>{v}</option>)}</select></label>))}
+              <button className="sel w-full text-xs" onClick={() => setOpen(false)}>Done</button>
+            </div>)}
         </div>
       </div>
       <div className="overflow-x-auto">

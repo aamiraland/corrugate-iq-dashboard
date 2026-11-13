@@ -13,6 +13,7 @@ const Grid = ({ children, cols = 2 }) => <div className={`grid grid-cols-1 ${col
 const dailySeries = (rows, key) => rows.map((r) => ({ name: r.name, [key]: r.value }));
 const byCat = (ins, ...cats) => ins.filter((i) => cats.includes(i.cat));
 
+//new
 export function Overview({ s, ins, f }) {
   const { prod, down, orders } = s;
   const lines = [...new Set([...f.production, ...f.downtime].map((r) => r.line).filter(Boolean))];

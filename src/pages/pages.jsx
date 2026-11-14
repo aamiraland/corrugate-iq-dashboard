@@ -83,6 +83,7 @@ export function Machines({ s, ins }) {
     { key: 'flag', label: 'Flag', sortVal: high, render: (m) => (high(m) ? <span className="text-amber-700 font-medium">High downtime</span> : '—') },
   ];
   const asVal = (k) => machines.map((m) => ({ name: m.line, value: m[k] ?? 0 }));
+  
   return (
     <div className="space-y-5">
       <Notice>In this workbook each machine is a production line the machine column holds Line 1–3, so machine and line views are identical. A machine is flagged when its downtime is at least {T.lineHigh}× the average of the other machines.</Notice>

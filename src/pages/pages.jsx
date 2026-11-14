@@ -85,7 +85,7 @@ export function Machines({ s, ins }) {
   const asVal = (k) => machines.map((m) => ({ name: m.line, value: m[k] ?? 0 }));
   return (
     <div className="space-y-5">
-      <Notice>In this workbook each machine is a production line (the <code>machine</code> column holds Line 1–3), so machine and line views are identical. A machine is flagged when its downtime is at least {T.lineHigh}× the average of the other machines.</Notice>
+      <Notice>In this workbook each machine is a production line the machine column holds Line 1–3, so machine and line views are identical. A machine is flagged when its downtime is at least {T.lineHigh}× the average of the other machines.</Notice>
       <KPIGrid>
         <KPI icon={Wrench} label="Highest Downtime Machine" value={withDown[0]?.line ?? '—'} sub={withDown[0] && fmtDur(withDown[0].minutes)} status={withDown[0] && high(withDown[0]) ? 'warn' : undefined} />
         <KPI icon={Hash} label="Downtime Frequency" value={fmtNum(down.events)} unit="events" />
